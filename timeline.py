@@ -60,38 +60,65 @@ def build(song, count_in, anticipation):
             continue
 
         spb    = 60.0 / bpm
-        spm    = spb * time_num
         chords = item['chords']
 
-        total_measures = sum(cg['repeats'] * len(cg['pattern']) for cg in chords)
-        duration = total_measures * spm
+        # Block duration: sum each measure's actual duration.
+        # Removers shorten a measure — each "=" removes one slot's worth of beats.
+        duration = sum(
+            _measure_actual_beats(measure, time_num) * spb * cg['repeats']
+            for cg in chords
+            for measure in cg['pattern']
+        )
 
         bid = block_id
         blocks.append(_block(bid, 'content', current_time, duration,
                              item.get('lyrics', ''), item.get('style', 'default'),
                              chords, 0, bpm, time_num))
 
-        # Beat events: one per beat, per measure, per repetition, per chord group
+        # Beat events: skip remover slots; beat_idx counts chord beats within the measure.
         t = current_time
         for cg_idx, cg in enumerate(chords):
             for rep_idx in range(cg['repeats']):
-                for m_idx in range(len(cg['pattern'])):
-                    for b in range(time_num):
-                        beat_events.append({
-                            't': t + b * spb,
-                            'block_id': bid,
-                            'chord_group_idx': cg_idx,
-                            'repeat_idx': rep_idx,
-                            'measure_idx': m_idx,
-                            'beat_idx': b,
-                        })
-                    t += spm
+                for m_idx, measure in enumerate(cg['pattern']):
+                    n_elem         = len(measure)
+                    beats_per_slot = time_num / n_elem if n_elem > 0 else float(time_num)
+                    n_dots         = round(beats_per_slot)
+                    t_cursor       = t
+                    flat_beat      = 0
+                    for elem in measure:
+                        if elem != '=':
+                            for b in range(n_dots):
+                                beat_events.append({
+                                    't': t_cursor + b * spb,
+                                    'block_id': bid,
+                                    'chord_group_idx': cg_idx,
+                                    'repeat_idx': rep_idx,
+                                    'measure_idx': m_idx,
+                                    'beat_idx': flat_beat + b,
+                                })
+                            flat_beat += n_dots
+                        t_cursor += beats_per_slot * spb
+                    t += _measure_actual_beats(measure, time_num) * spb
 
         block_id    += 1
         current_time += duration
 
     beat_events.sort(key=lambda e: e['t'])
     return blocks, beat_events
+
+
+def _measure_actual_beats(measure, time_num):
+    """Actual (chord) beat count in a measure — removers shorten the measure.
+
+    Every element occupies one equal slot of size (time_num / n_elements).
+    Chord elements keep their slot's beats; '=' removers discard them.
+    """
+    n_elem = len(measure)
+    if n_elem == 0:
+        return float(time_num)
+    remover_count = sum(1 for e in measure if e == '=')
+    chord_count   = n_elem - remover_count
+    return chord_count * (time_num / n_elem)
 
 
 def _block(bid, kind, start, duration, lyrics, style, chords, countin_beats, bpm, time_num):

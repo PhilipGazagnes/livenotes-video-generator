@@ -119,13 +119,18 @@ def _draw_chord_dot_rows(draw, fonts, block, state, y, is_text_active, is_dots_a
         repeats      = cg['repeats']
 
         for m_idx, measure in enumerate(pattern):
-            n_elem        = len(measure)
-            beats_per_elem = time_num / n_elem   # float; assume even division
-            measure_px    = time_num * L.BEAT_WIDTH
+            n_elem         = len(measure)
+            beats_per_slot = time_num / n_elem if n_elem > 0 else float(time_num)
+            n_dots         = round(beats_per_slot)   # dots (beats) per chord element
+            chord_count    = sum(1 for e in measure if not _is_remover(e))
+            measure_px     = chord_count * n_dots * L.BEAT_WIDTH
 
-            for elem_idx, elem in enumerate(measure):
-                elem_x = x + round(elem_idx * beats_per_elem * L.BEAT_WIDTH)
-                n_dots = round(beats_per_elem)
+            chord_rank = 0
+            for elem in measure:
+                if _is_remover(elem):
+                    continue  # no text, no dots, no visual space
+
+                elem_x = x + chord_rank * n_dots * L.BEAT_WIDTH
 
                 # Chord text
                 chord_color = L.TEXT_ACTIVE if is_text_active else L.TEXT_INACTIVE
@@ -135,9 +140,11 @@ def _draw_chord_dot_rows(draw, fonts, block, state, y, is_text_active, is_dots_a
                 # Beat dots
                 for b in range(n_dots):
                     dot_x = elem_x + b * L.BEAT_WIDTH + L.BEAT_WIDTH // 2
-                    color = _dot_color(is_active_cg, m_idx, elem_idx, b,
-                                       beats_per_elem, time_num, state)
+                    color = _dot_color(is_active_cg, m_idx, chord_rank, b,
+                                       n_dots, state)
                     _circle(draw, dot_x, dot_y, L.DOT_RADIUS, color)
+
+                chord_rank += 1
 
             # Measure separator (not after the last measure in this chord group)
             if m_idx < len(pattern) - 1:
@@ -177,19 +184,28 @@ def _fmt_chord(elem):
     return str(elem)
 
 
-def _dot_color(is_active_cg, m_idx, elem_idx, b_within_elem,
-               beats_per_elem, time_num, state):
+def _is_remover(elem):
+    """Return True for beat-remover elements ('=') that have no visual representation."""
+    return elem == '='
+
+
+def _dot_color(is_active_cg, m_idx, chord_rank, b_within_elem, n_dots, state):
     """Return the color for a single beat dot."""
     if not is_active_cg:
         return L.DOT_FUTURE
 
-    # Global beat index within the current pass through this chord group's pattern
-    global_beat  = m_idx * time_num + round(elem_idx * beats_per_elem) + b_within_elem
-    active_beat  = state['measure_idx'] * time_num + state['beat_idx']
-
-    if global_beat < active_beat:
+    if m_idx < state['measure_idx']:
         return L.DOT_PAST
-    elif global_beat == active_beat:
+    if m_idx > state['measure_idx']:
+        return L.DOT_FUTURE
+
+    # Same measure: compare flat beat position (chord_rank * n_dots + b)
+    flat_beat   = chord_rank * n_dots + b_within_elem
+    active_beat = state['beat_idx']
+
+    if flat_beat < active_beat:
+        return L.DOT_PAST
+    elif flat_beat == active_beat:
         return L.DOT_ACTIVE
     else:
         return L.DOT_FUTURE

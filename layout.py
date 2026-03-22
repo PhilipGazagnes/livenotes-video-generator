@@ -1,3 +1,5 @@
+from pathlib import Path
+
 WIDTH, HEIGHT = 1920, 1080
 FPS = 60
 
@@ -13,12 +15,37 @@ DOT_REPEAT_ACTIVE   = (245, 166, 35)
 DOT_REPEAT_INACTIVE = (51, 51, 51)
 SEPARATOR_COLOR     = (68, 68, 68)
 
-# Fonts — Ubuntu family (static TTF files, Pillow-safe)
-_UBUNTU = '/usr/share/fonts/truetype/ubuntu'
-FONT_REGULAR = f'{_UBUNTU}/Ubuntu-R.ttf'
-FONT_BOLD    = f'{_UBUNTU}/Ubuntu-B.ttf'
-FONT_ITALIC  = f'{_UBUNTU}/Ubuntu-RI.ttf'
-FONT_MONO    = f'{_UBUNTU}/UbuntuMono-R.ttf'
+# Fonts — macOS first, Linux fallback
+def _pick_font(*candidates):
+	for path in candidates:
+		if Path(path).exists():
+			return path
+	return candidates[0]
+
+
+FONT_REGULAR = _pick_font(
+	'/System/Library/Fonts/Supplemental/Arial.ttf',
+	'/Library/Fonts/Arial.ttf',
+	'/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf',
+)
+
+FONT_BOLD = _pick_font(
+	'/System/Library/Fonts/Supplemental/Arial Bold.ttf',
+	'/Library/Fonts/Arial Bold.ttf',
+	'/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf',
+)
+
+FONT_ITALIC = _pick_font(
+	'/System/Library/Fonts/Supplemental/Arial Italic.ttf',
+	'/Library/Fonts/Arial Italic.ttf',
+	'/usr/share/fonts/truetype/ubuntu/Ubuntu-RI.ttf',
+)
+
+FONT_MONO = _pick_font(
+	'/System/Library/Fonts/Supplemental/Courier New.ttf',
+	'/Library/Fonts/Courier New.ttf',
+	'/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf',
+)
 
 # Font sizes (tune after first render)
 FONT_LYRICS_SIZE = 42
